@@ -163,6 +163,68 @@ class FalAdapter
                 }
             }
 
+            // get referenced contents
+            $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
+                ->getQueryBuilderForTable('sys_refindex');
+
+            $predicates = [
+                $queryBuilder->expr()->eq(
+                    'ref_table',
+                    $queryBuilder->createNamedParameter('sys_file')
+                ),
+                $queryBuilder->expr()->eq(
+                    'ref_uid',
+                    $queryBuilder->createNamedParameter($file->getUid(), Connection::PARAM_INT)
+                ),
+            ];
+
+            $rows = $queryBuilder
+                ->select('*')
+                ->from('sys_refindex')
+                ->where(...$predicates)
+                ->executeQuery()
+                ->fetchAllAssociative();
+            foreach ($rows as $row) {
+                if ($row['tablename'] === 'sys_file_reference') {
+                    $row = $this->transformFileReferenceToRecordReference($row);
+                    if ($row === null) {
+                        continue;
+                    }
+                }
+                $uri = '';
+                switch($row['tablename']) {
+                    case 'tt_content':
+                        $record = BackendUtility::getRecordWSOL($row['tablename'], $row['recuid']);
+                        if ($record) {
+                            // @todo hardcoded site id
+                            $site = GeneralUtility::makeInstance(SiteFinder::class)->getSiteByPageId(1);
+                            $uri = (string)$site->getRouter()->generateUri((string)$record['pid']);
+                        }
+                        break;
+                    case 'tx_news_domain_model_news':
+                        $record = BackendUtility::getRecordWSOL($row['tablename'], $row['recuid']);
+                        if ($record) {
+                            $site = GeneralUtility::makeInstance(SiteFinder::class)->getSiteByPageId(1);
+                            $uri = (string)$site->getRouter()->generateUri((string)61, [
+                                'tx_news_pi1' => [
+                                    'controller' => 'News',
+                                    'action' => 'Detail',
+                                    'news' => $record['uid']
+                                ]
+                            ]);
+                        }
+                        break;
+                    default:
+                        continue 2;
+                }
+            }
+
+            // add found context page to prompt
+            if (!empty($uri)) {
+                $lastImagePart = $file->getNameWithoutExtension() . '.webp';
+                $additionalPrompt = "\nAlso visit this Website: '".str_replace('dkfz-website-typo3.ddev.site', 'www.dkfz.de', $uri) . "' where the given image is located beside textual content. You can identify the image by it\'s filename '$lastImagePart'' from HTML markup. Please use the surounded text as additional context to generate the best possible alternative text.";
+            }
+
             $altText = $this->openAiClient->buildAltText(
                 $file->getContents(),
                 $falLanguages[$sysLanguageUid]
