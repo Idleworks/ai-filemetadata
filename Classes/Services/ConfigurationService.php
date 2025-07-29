@@ -12,6 +12,7 @@ class ConfigurationService
 {
     private array $falExcludes = [];
     private array $falLanguageMappings = [];
+    private bool $generateAltTextOnFileUpload = true;
     private int $imageResizing = 0;
 
     public function __construct(private readonly ConfigurationManager $configurationManager,
@@ -43,6 +44,15 @@ class ConfigurationService
         }
 
         try {
+            $this->generateAltTextOnFileUpload = (bool)ArrayUtility::getValueByPath(
+                $configuration,
+                'EXTENSIONS/ai_filemetadata/generateAltTextOnFileUpload'
+            );
+        } catch (\Exception) {
+            $this->generateAltTextOnFileUpload = true;
+        }
+        
+        try {
             $this->imageResizing = (int)ArrayUtility::getValueByPath(
                 $configuration,
                 'EXTENSIONS/ai_filemetadata/imageResizing'
@@ -50,6 +60,7 @@ class ConfigurationService
         } catch (\Exception) {
             $this->imageResizing = 0;
         }
+        
     }
 
     public function shouldBeExcluded(File $file): bool
@@ -101,6 +112,11 @@ class ConfigurationService
         return $this->falLanguageMappings;
     }
 
+    public function getGenerateAltTextOnFileUpload(): bool
+    {
+        return $this->generateAltTextOnFileUpload;
+    }
+    
     public function getImageResizing(): int
     {
         return $this->imageResizing;
